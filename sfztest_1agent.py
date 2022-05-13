@@ -1,7 +1,5 @@
 
 import pandas as pd
-from scipy import rand
-from sklearn import cluster
 from sklearn.cluster import KMeans
 import numpy as np
 import matplotlib.pyplot as plt
@@ -12,7 +10,6 @@ import pickle
 import matplotlib.gridspec as gridspec
 from pathlib import Path
 from collections import namedtuple
-import Blit
 import pyqt
 
 plt.style.use('fast')
@@ -91,14 +88,6 @@ def normalize(data):
     return scaler.transform(data)
 
 
-def static_vars(**kwargs):
-    def decorate(func):
-        for k in kwargs:
-            setattr(func, k, kwargs[k])
-        return func
-    return decorate
-
-
 def LoadData(show):
     df = pd.read_excel("dataset.xlsm")
     customer = []
@@ -123,20 +112,15 @@ def GetActionSpace():
 N = 0
 N2 = 10
 H = 5000
-CLUSTER = 2500
+CLUSTER = 250
 customer = None
-# revenue_total = sum([customer[r].price
-#                      for r in range(0, N)])
-# retention_total = sum([rho(customer[r].tier, 1)
-#                        for r in range(0, N)]) / N
-
 
 CONVBOUND = 0
 CONVCEIL = 100
 EPOCH = 2000
 VERSION = "v3sfzdy"
 # decayed-episilon-greedy
-# 0 -> power decayed, 1 -> double linear decayed, 2 -> linear decayed, 3 -> 1/x-square, 4 ->  1/x
+# ax^2+b, ax + b, a^(2x), 1/(ax^2+b), 1/(ax+b)
 ep_mode = 0
 epsilon_max = 1
 epsilon_min = 0.001
@@ -231,7 +215,7 @@ class sfz_dynamic_model():
     def epsilon_greedy(self, deterministic, actionSet, cid, round, verbose=False):
         cus = customer[cid]
         rv = np.random.uniform(0, 1)
-        if(deterministic == False):
+        if deterministic == False:
             if self.epsilon_counter != round:
                 self.epsilon_counter = round
                 if ep_mode == 0:
@@ -295,20 +279,15 @@ class sfz_dynamic_model():
     def alogor1(self, H, N, N2, K, graph=False):
         C = list()
         for i in range(H):
-            select_p = 0
             selected_value = 0
             f1n = 0
-            f2n = 0
             for j in range(N, N2):
                 cus = customer[j]
                 an = np.random.choice(arange(cus.c0, cus.c1))
                 pi = rho(cus.tier, an)
                 selected_value += cus.price * an * pi
-                select_p += pi
                 f1n = selected_value
-                f2n = (select_p + sum([rho(customer[r].tier, 1)
-                                       for r in range(j+1, N2)])) / (N2-N)
-                sn = [f1n, f2n, cus.price] + TierSet(cus.tier)
+                sn = [f1n, cus.price] + TierSet(cus.tier)
                 C.append(sn)
         C = np.array(C)
         scaler = preprocessing.MinMaxScaler()
@@ -354,89 +333,66 @@ class sfz_dynamic_model():
     def GetCurrentCid(self):
         return self.__currentCid
 
-    def OtherState(self):
-        return None
-
-    def HistoryState(self, x):
-        return x
-    # Some external factor that may effect customer Willingness
-
-    def ExFactorOnPi(self):
-        return 1
-
-    def GetState(self, state):
-        k = self.OtherState()
-        if k == None:
-            return state
-        else:
-            return state, k
-
-    def HistoryState(self, x):
-        return x
-
-    def ConvergeCondition(self):
-        return self.isConv == CONVCEIL
-
-    def GetConvCounter(self):
-        return self.isConv
-
     def Train(self, H, N, N2, learning_rate, gamma, verbose):
-        for i in range(H):
+        i = 0
+        while i <= H:
+            i += 1
             self.ROUND += 1
             if SHOW_PROCESS:
                 print(self.ROUND)
             selected_value, actionRecorder = 0, []
 
             f1n = 0
-            f2n = 0
-            state = self.D([f1n, f2n, customer[0].price] +
-                           TierSet(customer[0][3]))
-            selected_p = 0
+            state = self.D([f1n, customer[0].price] +
+                           TierSet(customer[0].tier))
+            if i == H:
+                verbose = 1
             for j in range(N, N2):
                 self.__currentCid = j
                 an = self.epsilon_greedy(
-                    False, self.Q[self.GetState(state)], j, self.ROUND, verbose)
+                    False, self.Q[state], j, self.ROUND, verbose)
+                if i == H:
+                    an = self.epsilon_greedy(
+                        True, self.Q[state], j, self.ROUND, verbose)
                 yield an
                 actionRecorder.append(an)
                 cus = customer[j]
                 pi = rho(cus.tier, an)
-                ask = np.random.binomial(1, pi * self.ExFactorOnPi())
+                ask = np.random.binomial(1, pi)
 
                 if GET_NEW_DATA:
-                    self.hist_data[j][self.HistoryState(an)].append(ask)
+                    self.hist_data[j][an].append(ask)
                     self.workbook[self.ROUND].append(
                         (an, ask))
-                e = np.mean(self.hist_data[j][self.HistoryState(an)]
-                            ) if self.hist_data[j][self.HistoryState(an)] else 0
+                e = np.mean(self.hist_data[j][an]
+                            ) if self.hist_data[j][an] else 0
                 selected_value += cus.price * an * e
-                selected_p += pi
+
                 oldfn = f1n
                 f1n = selected_value
-                f2n = (selected_p + sum([rho(customer[r].tier, 1)
-                                        for r in range(j+1, N2)])) / (N2-N)
+
                 reward = f1n - oldfn
                 state_p = None
                 maxQ = 0
 
                 if j <= N2-2:
                     cj1 = customer[j+1]
-                    state_p = self.D([f1n, f2n, cj1.price] +
+                    state_p = self.D([f1n, cj1.price] +
                                      TierSet(cj1.tier))
 
                     maxQ = gamma * \
-                        self.Q[self.GetState(state_p)][self.epsilon_greedy(
-                            deterministic=True, actionSet=self.Q[self.GetState(state_p)], cid=j, round=self.ROUND, verbose=verbose)]
-                if verbose:
-                    print(
-                        f"Q={self.Q[self.GetState(state)][an]} reward {reward}", end=" ")
-                self.Q[self.GetState(state)][an] = (1 - learning_rate) * self.Q[self.GetState(state)][an] + learning_rate * (
+                        self.Q[state_p][self.epsilon_greedy(
+                            deterministic=True, actionSet=self.Q[state_p], cid=j, round=self.ROUND, verbose=verbose)]
+
+                self.Q[state][an] = (1 - learning_rate) * self.Q[state][an] + learning_rate * (
                     reward + maxQ)
 
                 if verbose:
-                    print(
-                        f"[an: {an} ask: {ask} p: {e}] pi: {pi}")
-                    print(f"Q*={self.Q[self.GetState(state)][an]}")
-
+                    print(f"[an: {an} ask: {ask} p: {e}] pi: {pi}")
+                if i == H:
+                    for an in arange(cus.c0, cus.c1):
+                        print(f"[{an}]: {round(self.Q[state][an],3)}")
+                    print(".................")
                 state = state_p
 
             if self.dynamic_graph:
@@ -449,9 +405,9 @@ class sfz_dynamic_model():
                     self.isConv = self.isConv + 1
                 else:
                     self.isConv = 0
-                if self.ConvergeCondition():
-                    print(f"Agent{self.agentId} Converge")
-                    break
+                if self.isConv == CONVCEIL:
+                    print(f"Agent({self.agentId}) Converge")
+                    i = H - 1
             yield
 
     def TextResult(self):
@@ -480,7 +436,7 @@ class sfz_dynamic_model():
 
         if SHOW_REV_GRAPH:
             c = np.array(self.c, dtype=object)
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
+            _, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
             ax1.set_title("revenue known by agent")
             ax2.set_title("revenue known by god")
             ax1.plot(c[:, 0], linewidth=1)
@@ -493,13 +449,13 @@ class sfz_dynamic_model():
             plt.show()
 
     def SavePickle(self):
-        with Path(f"{VERSION}/histdata{self.agentId}.pickle").open('wb') as f:
+        with Path(f"{VERSION}/histdata{self.agentId}_{N}_{N2}.pickle").open('wb') as f:
             pickle.dump(dict(self.hist_data), f)
-        with Path(f"{VERSION}/workbook{self.agentId}.pickle").open('wb') as f:
+        with Path(f"{VERSION}/workbook{self.agentId}_{N}_{N2}.pickle").open('wb') as f:
             pickle.dump(self.workbook, f)
 
     def LoadHistdata(self):
-        with Path(f"{VERSION}/histdata{self.agentId}.pickle").open('rb') as f:
+        with Path(f"{VERSION}/histdata{self.agentId}_{N}_{N2}.pickle").open('rb') as f:
             return pickle.load(f)
 
     def SaveWorkbook(self):
@@ -527,10 +483,10 @@ class sfz_dynamic_model():
 
     def ShowHistdata(self):
         hist_data = self.hist_data
-        for j in range(N):
+        for j in range(N, N2):
             for i in arange(customer[j].c0, customer[j].c1):
                 d = hist_data[j][i]
-                hist_data[j][i] = np.mean(d) if d else 0 * i
+                hist_data[j][i] = (np.mean(d) if d else 0) * i
             print("---------------------")
             for i in sorted(hist_data[j].items()):
                 print(f"{i[0]:<4}   {i[1]:.2f}")
