@@ -208,6 +208,7 @@ class sfz_dynamic_model():
                                          list(self.__priority_selection[i]) for i in range(N, N2)}
         self.__coeffient = {i: (0, 0) for i in range(N, N2)}
         self.__avoid_set = {i: set() for i in range(N, N2)}
+        self.__last_round_for_newdata = 0
         # arange(customer[i].c0, customer[i].c1)[int((len(arange(customer[i].c0, customer[i].c1))-1)/2)],
         # self.__priority_selection = [
         #     deque() for i in range(N, N2)]
@@ -428,37 +429,39 @@ class sfz_dynamic_model():
                 # print(f"an: {an} _an: {_an}")
                 # print(f"delta: {self.Q[state][an] - oldq}")
                 # print(abs(get_rho(j, an)-Objective(an, c0, c1)))
-                if abs(self.Q[state][an] - oldq) <= 0.005 and self.__priority_selection[j]:
-                    self.__priority_selection[j].popleft()
-                    self.__coeffient[j] = (c0, c1)
-                    i = 0
-                    if not SILENT:
-                        print(f"Round: {self.ROUND}")
-                        print(an, Objective(an, c0, c1), get_rho(j, an))
-                        print(f"Q: {self.Q[state][an]}")
-                        print(self.__priority_selection[j])
-                        print("------------------------")
-
-                    # use linear regression to accelerate converge speed
-                    if not self.__priority_selection[j]:
-                        X = np.array([[x]
-                                     for x in self.__priority_selection_inv[j]])
-                        Y = np.array([[self.Q[state][s[0]]] for s in X])
-
-                        reg = LinearRegression().fit(X, Y)
-                        for x in arange(customer[j].c0, customer[j].c1):
-                            # if x not in X:
-                            self.Q[state][x] = reg.predict([[x]])[0, 0]
-                            if not SILENT:
-                                print(x, self.Q[state][x])
+                if self.__priority_selection[j]:
+                    if abs(self.Q[state][an] - oldq) <= 0.005:
+                        self.__last_round_for_newdata = self.ROUND
+                        self.__priority_selection[j].popleft()
+                        self.__coeffient[j] = (c0, c1)
+                        i = 0
                         if not SILENT:
+                            print(f"Round: {self.ROUND}")
+                            print(an, Objective(an, c0, c1), get_rho(j, an))
+                            print(f"Q: {self.Q[state][an]}")
+                            print(self.__priority_selection[j])
                             print("------------------------")
-                    # self.FitGraph(c0, c1)
-                elif abs(self.Q[state][an] - oldq) <= 0.005:
-                    self.__avoid_set[j].add(an)
-                    if an not in self.__avoid_set[j]:
-                        print(f"{self.ROUND}, an: {an}")
-                        print("////////////")
+
+                        # use linear regression to accelerate converge speed
+                        if not self.__priority_selection[j]:
+                            X = np.array([[x]
+                                          for x in self.__priority_selection_inv[j]])
+                            Y = np.array([[self.Q[state][s[0]]] for s in X])
+
+                            reg = LinearRegression().fit(X, Y)
+                            for x in arange(customer[j].c0, customer[j].c1):
+                                # if x not in X:
+                                self.Q[state][x] = reg.predict([[x]])[0, 0]
+                                if not SILENT:
+                                    print(x, self.Q[state][x])
+                            if not SILENT:
+                                print("------------------------")
+                else:
+                    if abs(self.Q[state][an] - oldq) <= 0.005:
+                        self.__avoid_set[j].add(an)
+                        if an not in self.__avoid_set[j]:
+                            print(f"{self.ROUND}, an: {an}")
+                            print("////////////")
 
                 if verbose:
                     print(
@@ -497,6 +500,9 @@ class sfz_dynamic_model():
 
     def GetFinalChoice(self):
         return self.c[-1].actions
+
+    def GetFinalRound(self):
+        return self.__last_round_for_newdata
 
     def TextResult(self):
         print("-----------Text Result----------------")

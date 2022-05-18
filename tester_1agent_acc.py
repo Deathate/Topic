@@ -9,7 +9,7 @@ model.decayed_step = 1500  # 1500
 model.ep_mode = 1
 model.CONVCEIL = 200
 model.CONVBOUND = 0
-model.CLUSTER = 200
+model.CLUSTER = 20
 model.GET_NEW_DATA = 1
 model.SILENT = True
 model.SHOW_REV_GRAPH = False
@@ -18,10 +18,8 @@ itl = .3
 model.itl = itl
 
 
-c = []
-
-
 def Iter():
+    np.random.seed(0)
     hist = collections.defaultdict(
         lambda: collections.defaultdict(list))
     xline = model.arange(0, 2, itl)
@@ -49,17 +47,20 @@ def Iter():
     for _ in g1:
         pass
     # m.TextResult()
-    c.append(m.GetFinalChoice()[0])
+    return m.GetFinalChoice()[0], m.GetFinalRound()
 
 
+c = []
+round = 0
 for i in range(0, 10):
     model.N = i
     model.N2 = model.N+1
-    Iter()
+    a0, a1 = Iter()
+    c.append(a0)
+    round += a1
 model.N = 0
 model.N2 = 10
 print(c)
 model.th_expected_rev(1)
-x = model.get_expected_rev(
-    c)
-print(x)
+x = model.get_expected_rev(c)
+print(f"Total Round: {round/(model.N2-model.N)}, rev: {x}")
