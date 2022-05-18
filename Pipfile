@@ -4,17 +4,6 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-matplotlib = "*"
-autopep8 = "*"
-pandas = "*"
-sklearn = "*"
-keyboard = "*"
-openpyxl = "*"
-pyqtgraph = "*"
-xlwt = "*"
-install = "*"
-pyqt6 = "*"
-seaborn = "*"
 
 [dev-packages]
 

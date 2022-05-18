@@ -1,2 +1,3 @@
-for i in range(2, 5):
-    print(i)
+import numpy as np
+x = np.array([[10.,  2.],
+              [1.,  2.]])
