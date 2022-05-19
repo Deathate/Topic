@@ -2,7 +2,6 @@
 import sfztest_1agent_acc as model
 import numpy as np
 import collections
-import matplotlib.pyplot as plt
 
 model.EPOCH = 1000
 model.decayed_step = 1500  # 1500
@@ -11,10 +10,10 @@ model.CONVCEIL = 200
 model.CONVBOUND = 0
 model.CLUSTER = 20
 model.GET_NEW_DATA = 1
-model.SILENT = True
+model.SILENT = 1
 model.SHOW_REV_GRAPH = False
 
-itl = .3
+itl = 7
 model.itl = itl
 
 
@@ -22,19 +21,13 @@ def Iter():
     np.random.seed(0)
     hist = collections.defaultdict(
         lambda: collections.defaultdict(list))
-    xline = model.arange(0, 2, itl)
-    size = 50
-    size = int(size/len(xline))
+    xline = model.arange(0, 2, count=itl)
+    size = 45
     for i in range(model.N, model.N2):
-        tier = model.customer[i].tier
-        for j in xline:
-            hist[i][j] = [np.random.binomial(1,
-                                             model.rho(tier, j)) for _ in range(size)]
-            hist[i][j] = [np.random.binomial(1,
-                                             model.rho(tier, j)) for _ in range(size)]
-
-    # yline = [np.mean(hist[0][x]) for x in xline]
-    # c0, c1 = model.FitCurve(xline, yline)
+        for x in xline:
+            hist[i][x] = [np.random.binomial(
+                1, model.get_rho(i, x)) for _ in range(size)]
+    # fd = [model.get_rho(first, r) for r in xline]
     # cusline = model.arange(model.customer[0].c0, model.customer[0].c1)
     # d = [model.get_rho(0, r) for r in cusline]
     # plt.plot(cusline, d, '--', color='red')
@@ -52,14 +45,16 @@ def Iter():
 
 c = []
 round = 0
-for i in range(0, 10):
+first = 0
+second = 10
+for i in range(first, second):
     model.N = i
     model.N2 = model.N+1
     a0, a1 = Iter()
     c.append(a0)
     round += a1
-model.N = 0
-model.N2 = 10
+model.N = first
+model.N2 = second
 print(c)
 model.th_expected_rev(1)
 x = model.get_expected_rev(c)

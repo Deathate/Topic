@@ -1,6 +1,5 @@
 
 
-from re import X
 import sfztest_1agent_acc as model
 import numpy as np
 from scipy.optimize import curve_fit
@@ -26,7 +25,6 @@ for s in tester:
     mse = 0
     ctr = 0
     for k in range(5):
-
         fd = arange(0, 2)
         itl = s
         x = arange(0, 2, itl)
@@ -47,11 +45,11 @@ for s in tester:
         except:
             pass
     print(s, mse/ctr, ctr)
-    # plt.plot(fd, d, color='red')
-    # plt.plot(x, y, color='y')
-    # plt.plot(x, objective(x, c0, c1), color='b')
-    # plt.show()
-
-    plt.plot(cr, cd, color='red')
-    plt.plot(cr, cf, '-o', color='b')
+    plt.plot(fd, d, color='red')
+    plt.scatter(x, y, color='y')
+    plt.plot(fd, objective(fd, c0, c1), '--', color='b')
     plt.show()
+
+    # plt.plot(cr, cd, color='red')
+    # plt.plot(cr, cf, '-o', color='b')
+    # plt.show()
