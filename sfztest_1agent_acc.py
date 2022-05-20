@@ -178,7 +178,6 @@ class sfz_dynamic_model():
         self.Q = collections.defaultdict(
             lambda: collections.defaultdict(int))
         self.c = []
-        self.isConv = 0
         self.ROUND = 0
         self.epsilon_counter = 0
         self.hist_data = collections.defaultdict(
@@ -186,7 +185,6 @@ class sfz_dynamic_model():
         self.workbook = collections.defaultdict(list, {})
         self.kmeans = None
         self.scaler = None
-        self.__currentCid = -1
 
         self.__priority_selection = {i:
                                      deque(arange(customer[i].c0, customer[i].c1, count=3)) for i in range(N, N2)}
@@ -254,7 +252,6 @@ class sfz_dynamic_model():
             if i == H+1:
                 verbose = True and not SILENT
             for j in range(N, N2):
-                self.__currentCid = j
 
                 cus = customer[j]
 
@@ -365,7 +362,6 @@ class sfz_dynamic_model():
         print(
             f"  Round: {self.ROUND:<5}, Estimate: {round(self.c[-1].rev,2)}, Real: {round(get_expected_rev(self.c[-1].actions),2)}, Data Amount: {self.__last_round_for_newdata}")
         print(f"  Choice: {self.c[-1].actions}")
-        print(f"  Conv: {self.isConv}")
         print("---------------------------")
 
     def Generator(self):
@@ -435,3 +431,6 @@ class sfz_dynamic_model():
 
     def GetHistdata(self, cid):
         return self.hist_data[cid]
+
+    def GetCoefficient(self):
+        return self.__coeffient[N]

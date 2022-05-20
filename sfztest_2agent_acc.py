@@ -128,7 +128,6 @@ epFACTOR = 0
 learning_rate = 0.1
 gamma = 0.9
 
-GET_NEW_DATA = True
 SHOW_PROCESS = False
 SHOW_REV_GRAPH = True
 SILENT = False
@@ -154,7 +153,7 @@ def th_expected_rev(verbose, start=0):
 
 def get_expected_rev(series):
     v = 0
-    for i in range(N+1):
+    for i in range(N):
         cus = customer[i]
         an = series[i]
         pi = rho(cus.tier, an)
@@ -177,7 +176,8 @@ class sfz_dynamic_model():
         self.hist_data = collections.defaultdict(
             lambda: collections.defaultdict(list))
         self.workbook = collections.defaultdict(list, {})
-
+        self.c0 = 0
+        self.c1 = 1
         # ax^2+b, ax + b, a^(2x), 1/(ax^2+b), 1/(ax+b)
         if ep_mode == 0:
             self.epFACTOR = (epsilon_min-epsilon_max)/(decayed_step**2-1)
@@ -256,8 +256,13 @@ class sfz_dynamic_model():
                     print(f"maxQ: {maxid} {own_dict}")
                 return maxid
 
-    def GetCurrentCid(self):
-        return self.__currentCid
+    def Objective(self, x, a, b):
+        def sigmoid(x):
+            return 1 / (1 + np.exp(-x))
+        return sigmoid(np.poly1d([a, b])(x))
+
+    def SetCurveCoeffient(self, c0, c1):
+        self.c0, self.c1 = c0, c1
 
     def OtherState(self):
         return None
@@ -276,7 +281,7 @@ class sfz_dynamic_model():
     def Train(self, H, N, learning_rate, gamma, verbose):
         for i in range(H):
             if i == H-1:
-                self.verbose = True and not SILENT
+                verbose = True and not SILENT
             self.ROUND += 1
             if SHOW_PROCESS:
                 print(self.ROUND)
@@ -286,25 +291,18 @@ class sfz_dynamic_model():
 
             an = self.epsilon_greedy(
                 False, self.Q[self.GetState()], j, self.ROUND, verbose)
+
             actionRecorder.append(an)
 
             cus = customer[j]
-            pi = rho(cus.tier, an)
-            ask = np.random.binomial(1, pi * self.ExFactorOnPi(an))
+            pi = self.Objective(an, self.c0, self.c1) * self.ExFactorOnPi(an)
 
-            if GET_NEW_DATA:
-                self.hist_data[j][self.GetState(), an].append(ask)
-                self.workbook[self.ROUND].append(
-                    (an, ask))
-            e = np.mean(self.hist_data[j][self.GetState(), an]
-                        ) if self.hist_data[j][self.GetState(), an] else 0
+            reward = cus.price * an * pi
 
-            reward = cus.price * an * e
-
-            if self.verbose:
+            if verbose:
                 print(self.GetState(), an)
 
-            if self.verbose:
+            if verbose:
                 print(
                     f"Q={self.Q[self.GetState()][an]} reward {reward}")
 
@@ -330,9 +328,9 @@ class sfz_dynamic_model():
             self.Q[self.GetState()][an] = (1 - learning_rate) * \
                 self.Q[self.GetState()][an] + learning_rate * (reward + maxQ)
 
-            if self.verbose:
+            if verbose:
                 print(
-                    f"[an: {an} ask: {ask} p: {e}] pi: {pi}")
+                    f"[an: {an} pi: {pi}")
                 print(f"Q*={self.Q[self.GetState()][an]}")
 
             if self.dynamic_graph:

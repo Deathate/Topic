@@ -3,7 +3,6 @@ import sfztest_2agent as model
 import types
 import numpy as np
 
-VERSION = model.VERSION
 model.decayed_step = 10000  # 2500
 # 0 -> power decayed, 1 -> double linear decayed, 2 -> linear decayed, 3 -> 1/x-square, 4 ->  1/x
 model.EPOCH = 12000
@@ -36,7 +35,7 @@ minit = m2init = 0
 
 def Test(cid):
     global minit, m2init
-    m = model.sfz_dynamic_model(7706, agentId=0, dynamicGraph=1, verbose=0)
+    m = model.sfz_dynamic_model(7706, agentId=0, dynamicGraph=0, verbose=0)
     m2 = model.sfz_dynamic_model(7706, agentId=1, dynamicGraph=0, verbose=0)
     m.ExFactorOnPi = types.MethodType(ExFactorOnPi, m)
     m2.ExFactorOnPi = types.MethodType(ExFactorOnPi, m2)
@@ -82,8 +81,8 @@ for i in range(1):
     print(a, b)
     first.append(a)
     second.append(b)
-print(first)
-print(second)
 e1 = model.get_expected_rev(first)
 e2 = model.get_expected_rev(second)
+print(first)
+print(second)
 print(e1, e2)

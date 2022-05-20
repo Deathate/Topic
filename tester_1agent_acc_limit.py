@@ -42,6 +42,7 @@ def Iter(seed=0):
     g1 = m.Generator()
     for _ in g1:
         pass
+    print(m.GetCoefficient())
     return m.GetFinalChoice()[0], m.GetFinalRound()
 
 
@@ -74,6 +75,4 @@ def MeanResult():
         s += b
     print(s/10, r/100)
 
-
-Test()
 # MeanResult()
