@@ -1,29 +1,24 @@
 
-import sfztest_dynamic as model
+import sfztest_2agent as model
 import types
-
+import numpy as np
 
 VERSION = model.VERSION
-model.EPOCH = 10000
-model.decayed_step = 5000  # 2500
+model.decayed_step = 10000  # 2500
 # 0 -> power decayed, 1 -> double linear decayed, 2 -> linear decayed, 3 -> 1/x-square, 4 ->  1/x
+model.EPOCH = 12000
 model.ep_mode = 1
-model.CONVCEIL = 100
-model.CONVBOUND = 5
-model.N = 5
-model.CLUSTER = 200
 model.SHOW_REV_GRAPH = False
-
-m = model.sfz_dynamic_model(0, agentId=0, dynamicGraph=1, verbose=0)
-m2 = model.sfz_dynamic_model(7706, agentId=1, dynamicGraph=0, verbose=0)
-
-minit = model.GetInitialPriceSet()
-m2init = model.GetInitialPriceSet()
+model.action_step = 0.1
+model.SILENT = True
 
 
-def ExFactorOnPi(self):
-    a, b = minit[self.GetCurrentCid()], m2init[self.GetCurrentCid()]
-
+def ExFactorOnPi(self, an):
+    a, b = minit, m2init
+    if self.GetId() == 0:
+        a = an
+    else:
+        b = an
     if a == b:
         return 0.5
     if self.agentId == 0:
@@ -32,51 +27,63 @@ def ExFactorOnPi(self):
         return a > b
 
 
-m.ExFactorOnPi = types.MethodType(ExFactorOnPi, m)
-m2.ExFactorOnPi = types.MethodType(ExFactorOnPi, m2)
-
-
 def OtherState(self):
-    return minit[self.GetCurrentCid()], m2init[self.GetCurrentCid()]
+    return minit, m2init
 
 
-# m.OtherState = types.MethodType(OtherState, m)
-# m2.OtherState = types.MethodType(OtherState, m2)
+minit = m2init = 0
 
 
-def HistoryState(self, x):
-    return self.OtherState()
+def Test(cid):
+    global minit, m2init
+    m = model.sfz_dynamic_model(7706, agentId=0, dynamicGraph=1, verbose=0)
+    m2 = model.sfz_dynamic_model(7706, agentId=1, dynamicGraph=0, verbose=0)
+    m.ExFactorOnPi = types.MethodType(ExFactorOnPi, m)
+    m2.ExFactorOnPi = types.MethodType(ExFactorOnPi, m2)
+    m.OtherState = types.MethodType(OtherState, m)
+    m2.OtherState = types.MethodType(OtherState, m2)
 
+    g1 = m.Generator()
+    g2 = m2.Generator()
 
-# m.HistoryState = types.MethodType(HistoryState, m)
-# m2.HistoryState = types.MethodType(HistoryState, m2)
+    model.N = cid
+    minit = model.GetInitialPriceSet()
+    m2init = model.GetInitialPriceSet()
 
-
-def ConvergeCondition(self):
-    return m.GetConvCounter() > 100 and m2.GetConvCounter() > 100
-
-
-m.ConvergeCondition = types.MethodType(ConvergeCondition, m)
-m2.ConvergeCondition = types.MethodType(ConvergeCondition, m2)
-
-g1 = m.Generator()
-g2 = m2.Generator()
-
-i = 0
-try:
-    while True:
-        for i in range(model.N):
+    try:
+        while True:
             x = next(g1)
-            minit[i] = x
-        next(g1)
-        for i in range(model.N):
+            minit = x
             y = next(g2)
-            m2init[i] = y
-        next(g2)
-except StopIteration:
-    m.TextResult()
-    m2.TextResult()
-    m.SavePickle()
-    m2.SavePickle()
-    pass
-input()
+            m2init = y
+    except StopIteration:
+        # print(m.GetFinialChoice(), m2.GetFinialChoice())
+        # data = []
+        # tbl = dict(m.GetQTable())
+        # for x, y in sorted(tbl.items()):
+        #     print(x)
+        #     y = dict(sorted(y.items(), key=lambda x: x[1], reverse=True))
+        #     for s in y.items():
+        #         print(f"{s[0]} | {round(s[1], 2)}")
+        #     # data.append(list(y.items())[0][0])
+        #     print("----------------------------")
+        # print(f"Mean: {np.mean(data)}")
+        # D = m.GetHistdata(0)
+        # for x in D:
+        #     print(len(D[x]))
+        pass
+    return m.GetFinialChoice(), m2.GetFinialChoice()
+
+
+first = []
+second = []
+for i in range(1):
+    a, b = Test(i)
+    print(a, b)
+    first.append(a)
+    second.append(b)
+print(first)
+print(second)
+e1 = model.get_expected_rev(first)
+e2 = model.get_expected_rev(second)
+print(e1, e2)

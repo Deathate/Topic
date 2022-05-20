@@ -5,8 +5,7 @@ import collections
 import types
 
 model.EPOCH = 1000
-model.decayed_step = 1500  # 1500
-model.GET_NEW_DATA = 1
+model.GET_NEW_DATA = 0
 model.SILENT = 1
 model.SHOW_REV_GRAPH = 0
 
@@ -76,5 +75,5 @@ def MeanResult():
     print(s/10, r/100)
 
 
-# Test()
-MeanResult()
+Test()
+# MeanResult()
