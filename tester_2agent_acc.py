@@ -6,7 +6,7 @@ import collections
 import types
 
 model.EPOCH = 1000
-model.GET_NEW_DATA = 0
+model.GET_NEW_DATA = 1
 model.SILENT = 1
 model.SHOW_REV_GRAPH = 0
 itl = 4

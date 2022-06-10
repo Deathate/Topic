@@ -92,7 +92,7 @@ def normalize(data):
 def LoadData():
     df = pd.read_excel("dataset.xlsm")
     customer = []
-    for i in range(50):
+    for i in range(10):
         customer.append(cstate._make((df["price"][i], df["c0"][i],
                         df["c1"][i], df["tier"][i])))
     return customer
@@ -294,7 +294,7 @@ class sfz_dynamic_model():
                     self.Q[state][an] + learning_rate * reward
 
                 if self.__priority_selection[j]:
-                    if abs(self.Q[state][an] - oldq) <= .01:
+                    if abs(self.Q[state][an] - oldq) <= .5:
                         self.__priority_selection[j].popleft()
                         self.__coeffient[j] = (c0, c1)
                         # self.FitGraph(c0, c1)

@@ -5,7 +5,7 @@ import collections
 import types
 
 model.EPOCH = 1000
-model.GET_NEW_DATA = 0
+model.GET_NEW_DATA = 1
 model.SILENT = 1
 model.SHOW_REV_GRAPH = 0
 
@@ -75,4 +75,11 @@ def MeanResult():
         s += b
     print(s/10, r/100)
 
+
 # MeanResult()
+# Test()
+# x = model.arange(0.8, 1.1, 0.05)
+# for i in x:
+#     print(i, model.get_rho(0, i))
+for i in model.arange(1, 1.2, 0.05):
+    print(model.get_rho(9, i))
