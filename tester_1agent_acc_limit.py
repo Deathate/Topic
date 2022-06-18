@@ -77,9 +77,4 @@ def MeanResult():
 
 
 # MeanResult()
-# Test()
-# x = model.arange(0.8, 1.1, 0.05)
-# for i in x:
-#     print(i, model.get_rho(0, i))
-for i in model.arange(1, 1.2, 0.05):
-    print(model.get_rho(9, i))
+Test()

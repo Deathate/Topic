@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 from sklearn import preprocessing
-from sklearn.linear_model import LinearRegression
 import collections
 import pickle
 from pathlib import Path
@@ -152,6 +151,16 @@ def get_expected_rev(series):
         cus = customer[i]
         an = series[i-N]
         pi = rho(cus.tier, an)
+        v += pi * cus.price * an
+    return v
+
+
+def get_estimated_rev(seriesx, seriesy):
+    v = 0
+    for i in range(N, N2):
+        cus = customer[i]
+        an = seriesx[i-N]
+        pi = seriesy[i-N]
         v += pi * cus.price * an
     return v
 

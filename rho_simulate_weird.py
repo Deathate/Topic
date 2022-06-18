@@ -1,16 +1,17 @@
 
 
 from scoping import scoping
-from sklearn.cluster import KMeans, SpectralClustering, AgglomerativeClustering, OPTICS
+from sklearn.cluster import SpectralClustering, AgglomerativeClustering, OPTICS
 import sfztest_1agent_acc as model
 import numpy as np
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
 import collections
-from sklearn.metrics import silhouette_score, mean_squared_error
 from scipy.interpolate import UnivariateSpline
 from sklearn.metrics import davies_bouldin_score, r2_score
 import warnings
+
+plt.style.use('fast')
 
 
 def sigmoid(x):
@@ -33,29 +34,16 @@ def cubic(x, a, b, c, d):
     return np.poly1d([a, b, c, d])(x)
 
 
-def siglinear(x, a, b):
-    return sigmoid(np.poly1d([a, b])(x))
-
-
-def sigquadratic(x, a, b, c):
-    return sigmoid(np.poly1d([a, b, c])(x))
-
-
-def sigcubic(x, a, b, c, d):
-    return sigmoid(np.poly1d([a, b, c, d])(x))
-
-
-def siglinear_sin(x, a, b, c):
-    return sigmoid(np.poly1d([a, b])(x)) + np.sin(c)
-
-
 def sin(x, a, b, c, d):
     return a * np.sin(b * x+c) + d
 
 
-fs = [linear, quadratic, cubic, siglinear, sigquadratic, sigcubic, sin]
-fsac = {linear: 2, quadratic: 3, cubic: 4,
-        siglinear: 2, sigquadratic: 3, sigcubic: 4, sin: 4}
+def arctan(x, a, b, c, d):
+    return a * np.arctan(b * x+c) + d
+
+
+fs = [linear, quadratic, cubic, sin]
+fsac = {linear: 2, quadratic: 3, cubic: 4, sin: 4}
 
 X1 = [0.79, .85, .9, 1, 1.1, 1.29]
 Y1 = [0.9, .85, .85, 0.5, 0.5, 0.9]
@@ -75,7 +63,9 @@ Y7 = np.where(Y7 <= 1, Y7, 0.9)
 X8 = [0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
 Y8 = [0.1, 1, 0.5, 0.9, 0.1, 1]
 X9 = [0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
-Y9 = [0.1, 0.9, 0.1, 0.9, 0.1, 0.9]
+Y9 = [0.6, 0.2, 0.1, 0.1, 0.2, 0.9]
+X10 = [0.5, 0.7, 0.9, 1.1, 1.3, 1.5]
+Y10 = [1-abs(1 - x) for x in X10]
 
 
 def Draw(x, y):
@@ -99,7 +89,7 @@ def Draw(x, y):
     plt.show()
 
 
-def CreateEstimate(x, y, size, itl, verbose):
+def CreateEstimate(x, y, size, itl):
     x, y = np.array(x), np.array(y)
     data = collections.defaultdict(list)
     np.random.seed(0)
@@ -115,24 +105,79 @@ def CreateEstimate(x, y, size, itl, verbose):
     est = dict(sorted(est.items()))
     Xest = np.array(list(est.keys()))
     Yest = np.array(list(est.values()))
-
-    # if verbose:
-    #     _, ax = plt.subplots(2)
-    #     r = model.arange(x.min(), x.max(), 0.01)
-    #     yline = spl(r)
-    #     yline = np.where(yline <= 1, yline, 1)
-    #     ax[0].plot(r, yline, x, y, 'o')
-    #     ax[1].plot(Xest, Yest, "-go", x, y, "ro")
-    #     plt.draw()
     return Xest, Yest, spl
 
 
-def Fitting(X, Y, ax):
+def GetBestCurve(fs, x, y, robust):
+    if x.size == 1:
+        return constant, [y[0]]
+    stds = []
+    for f in fs:
+        try:
+            if x.size < fsac[f]:
+                continue
+
+            if stds and robust == False and x.size == fsac[f]:
+                continue
+
+            coeffient, _ = curve_fit(
+                f, x, y)
+            yline = f(x, *coeffient)
+
+            adjrsqare = np.sum(np.square(np.absolute(yline-y)))
+            if stds and adjrsqare < 1e-5:
+                continue
+            stds.append((adjrsqare, f, coeffient))
+        except RuntimeError:
+            pass
+
+    return stds[(mid := np.argmin([x[0] for x in stds]))][1], stds[mid][2]
+
+
+def BestCurveWithoutOutliers(fs, X, Y, robust, segment=[[np.NINF, np.inf]]):
+    warnings.filterwarnings("ignore")
+
+    sunit = []
+    for lb, ub in segment:
+        s = (X > lb)*(X <= ub)
+        sunit.append((X[s], Y[s]))
+    bf = []
+    for x, y in sunit:
+        bf.append(GetBestCurve(fs, x, y, robust))
+        # print(bf[-1][0])
+    outsig = np.full((X.size), True)
+
+    outsig = np.array([], dtype=bool)
+    for i, (x, y) in enumerate(sunit):
+        f, coe = bf[i]
+        outliers = np.full((x.size), True)
+        if not (x.size == 1 or x.size == fsac[f]):
+            residual = np.absolute(
+                np.array([y[j]-f(x[j], *coe) for j in range(len(y))]))
+            sor = np.sqrt(
+                np.sum(np.square(residual))/(x.size-fsac[f]))
+            outliers = np.where(residual > 2 * sor, False, True)
+            outliers[0] = outliers[-1] = True
+        outsig = np.concatenate((outsig, outliers))
+
+    X = X[outsig]
+    Y = Y[outsig]
+    if np.all(outsig):
+        return bf
+    else:
+        return BestCurveWithoutOutliers(fs, X, Y, robust, segment)
+
+
+def Fitting(X, Y, ax=None, robust=True, fs=fs):
+    if not fs:
+        spl = UnivariateSpline(X, Y, s=0, k=1)
+        return spl
+
     X, Y = np.array(X), np.array(Y)
     X_copy, Y_copy = X.copy(), Y.copy()
     norm = np.stack((X, Y), axis=1)
 
-    def GetBestK(method=0):
+    def GetBestK():
         labels = []
         silhouette_avg = []
 
@@ -145,19 +190,12 @@ def Fitting(X, Y, ax):
                     return False
             return True
 
-        for i in range(2, 6):
+        for i in range(2, min(6, X.size)):
             labellist = [s for s in [SpectralClustering(n_clusters=i).fit_predict(norm), AgglomerativeClustering(n_clusters=i).fit_predict(norm),
                                      ] if LabelTogether(i, s)]
             listscore = [davies_bouldin_score(
                 norm, label)*((i-1)/i)**2 for label in labellist]
-            # print(i, listscore, labellist)
-            # KMeans(n_clusters=i).fit_predict(norm),SpectralClustering(n_clusters = i).fit_predict(norm),
-            # AgglomerativeClustering(n_clusters=i).fit_predict(norm)
-            # metrics.calinski_harabasz_score(norm, label), davies_bouldin_score, silhouette_score
-            # if labellist:
-            #     mid = np.argmin(listscore)
-            #     silhouette_avg.append((i-2, listscore[mid]))
-            #     labels.append(labellist[mid])
+
             for j, _ in enumerate(labellist):
                 silhouette_avg.append((i-2, listscore[j]))
                 labels.append(labellist[j])
@@ -173,7 +211,7 @@ def Fitting(X, Y, ax):
                     start = l
                     a[l] = ind
                 return a
-            labellist = [k for i in range(2, 6)
+            labellist = [k for i in range(2, min(6, X.size))
                          if LabelTogether((k := GroupNegative(OPTICS(min_samples=i).fit_predict(norm))).max()+1, k)]
 
             listscore = [davies_bouldin_score(
@@ -187,7 +225,6 @@ def Fitting(X, Y, ax):
         return silhouette_avg[(k := np.argmin([x[1] for x in silhouette_avg]))][0], labels[k]
     best_k, best_label = GetBestK()
     best_segment = best_k+2
-    print(best_label)
 
     def get_interval(segment, label):
         label = np.array(label)
@@ -202,75 +239,18 @@ def Fitting(X, Y, ax):
         return rg
 
     segment = get_interval(best_segment, best_label)
-    print(segment)
+
     for i in range(len(segment)-1):
         X = np.concatenate((X, [segment[i][1]+0.01]))
         Y = np.concatenate((Y, Y[np.where(X == segment[i][1])]))
     zxy = sorted(list(zip(X, Y)))
     X, Y = np.array([x[0] for x in zxy]), np.array([x[1] for x in zxy])
 
-    def BestCurveWithoutOutliers(X, Y):
-        warnings.filterwarnings("ignore")
-
-        def GetBestCurve(x, y):
-            if x.size == 1:
-                return constant, [y[0]]
-            stds = []
-            for f in fs:
-                try:
-                    if x.size < fsac[f]:
-                        continue
-                    coeffient, _ = curve_fit(
-                        f, x, y)
-                    yline = f(x, *coeffient)
-                    rsquare = r2_score(y, yline)
-                    rsquare = max(0, rsquare)
-                    if x.size > 5:
-                        adjrsqare = round(1-(1-rsquare)*(x.size-1) /
-                                            (x.size-fsac[f]-1), 3)
-                    else:
-                        adjrsqare = rsquare
-                    stds.append((adjrsqare, f, coeffient))
-                except RuntimeError:
-                    pass
-            return stds[(mid := np.argmax([x[0] for x in stds]))][1], stds[mid][2]
-
-        sunit = []
-        for lb, ub in segment:
-            s = (X > lb)*(X <= ub)
-            sunit.append((X[s], Y[s]))
-        bf = []
-        for x, y in sunit:
-            bf.append(GetBestCurve(x, y))
-            print(bf[-1][0])
-        outsig = np.full((X.size), True)
-
-        outsig = np.array([], dtype=bool)
-        for i, (x, y) in enumerate(sunit):
-            f, coe = bf[i]
-            outliers = np.full((x.size), True)
-            if not (x.size == 1 or x.size == fsac[f]):
-                residual = np.absolute(
-                    np.array([y[j]-f(x[j], *coe) for j in range(len(y))]))
-                sor = np.sqrt(
-                    np.sum(np.square(residual))/(x.size-fsac[f]))
-                outliers = np.where(residual > 2 * sor, False, True)
-                outliers[0] = outliers[-1] = True
-            outsig = np.concatenate((outsig, outliers))
-
-        #     r = np.array(model.arange(min(x), max(x), 0.01))
-        #     plt.plot(r, f(r, *coe))
-        #     plt.scatter(x[outliers], y[outliers], color="blue")
-        #     plt.scatter(x[~outliers], y[~outliers], color="red")
-        # plt.show()
-
-        X = X[outsig]
-        Y = Y[outsig]
-        if np.all(outsig):
-            return bf, (X, Y)
-        else:
-            return BestCurveWithoutOutliers(X, Y)
-    bf, (X, Y) = BestCurveWithoutOutliers(X, Y)
+    bf = BestCurveWithoutOutliers(fs, X, Y, robust, segment)
+    if robust:
+        lr = BestCurveWithoutOutliers(fs, X, Y, robust)
+    else:
+        lr = BestCurveWithoutOutliers(fs, X_copy, Y_copy, robust)
 
     def Fit(x):
         v = 0
@@ -281,34 +261,44 @@ def Fitting(X, Y, ax):
 
         return v
 
+    mvlr = np.var(np.absolute(Fit(X_copy)-Y_copy)) * \
+        ((X.size-1)/(X.size-len(segment)-1))**2
+    slr = np.var(np.absolute(lr[0][0](X_copy, *lr[0][1])-Y_copy))
+    if slr <= mvlr or mvlr < 1e-4/X_copy.size:
+        segment = [[np.NINF, np.inf]]
+        bf = lr
+        best_segment = 1
+
     full_range = np.array(model.arange(X.min(), X.max(), 0.01))
     spl = UnivariateSpline(X_copy, Fit(X_copy), s=0, k=2)
-    ax.plot(full_range, spl(full_range))
-    for i in range(best_segment):
-        filter = (X_copy > segment[i][0]) * (X_copy <= segment[i][1])
-        ax.scatter(X_copy[filter], Y_copy[filter])
+
+    if ax:
+        ax.plot(full_range, spl(full_range))
+        for i in range(best_segment):
+            filter = (X_copy > segment[i][0]) * (X_copy <= segment[i][1])
+            ax.scatter(X_copy[filter], Y_copy[filter])
     return spl
 
 
-xset = [X1, X2, X3, X4, X5, X6, X7, X8, X9]
-yset = [Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8, Y9]
+xset = [X1, X2, X3, X4, X5, X6, X7, X8, X9, X10]
+yset = [Y1, Y2, Y3, Y4, Y5, Y6, Y7, Y8, Y9, Y10]
 
 
 def ShowAllTest():
-    fig, ax = plt.subplots(2, 4)
-    fig.set_size_inches(1920/100, 900/100)
+    fig, ax = plt.subplots(2, 5)
+    fig.set_size_inches(1920/100, 800/100)
     fig.tight_layout()
 
-    for i, (a, b) in enumerate([[x0, y0] for x0 in [0, 1] for y0 in [0, 1, 2, 3]]):
+    for i, (a, b) in enumerate([[x0, y0] for x0 in [0, 1] for y0 in [0, 1, 2, 3, 4]]):
         with scoping():
             ax = ax[a][b]
             setid = i
             X = xset[setid]
             Y = yset[setid]
-            itl = 0.1
-            size = len(model.arange(min(X), max(X), itl)) * 30
-            x3est, y3est, spl = CreateEstimate(X, Y, size, itl, 0)
-            f = Fitting(x3est, y3est, ax)
+            itl = 0.05
+            size = len(model.arange(min(X), max(X), itl)) * 20
+            x3est, y3est, spl = CreateEstimate(X, Y, size, itl)
+            Fitting(x3est, y3est, ax, True)
             r = np.array(model.arange(min(X), max(X), 0.01))
             yline = spl(r)
             yline = np.where(yline <= 1, yline, 1)
