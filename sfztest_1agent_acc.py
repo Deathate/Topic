@@ -75,7 +75,7 @@ def TierSet(x):
     return {1: [1, 0, 0], 2: [0, 1, 0], 3: [0, 0, 1]}[x]
 
 
-def arange(c0, c1, step=0.01, count=-1):
+def arange(c0, c1, step=0.05, count=-1):
     if count == -1:
         count = round((c1 - c0)/step)+1
     return list(map(lambda x: round(x, 2), np.linspace(

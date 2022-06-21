@@ -64,7 +64,7 @@ def Cal(xest, yest, robust=True, ax=None):
     best_nav = xest[np.argmax([xest[i] * f_nav(xest[i])
                               for i in range(len(xest))])]
 
-    return best, f(best),  best_nav, f_nav(best_nav)
+    return best, f(best),  best_nav, f_nav(best_nav), f
 
 
 def test(xest, yest, robust, graph=False):
@@ -72,6 +72,7 @@ def test(xest, yest, robust, graph=False):
     selects_nav = []
     mest = []
     mest_nav = []
+    F = []
     if graph:
         fig, ax = plt.subplots(2, 5)
         fig.set_size_inches(1920/100, 800/100)
@@ -85,11 +86,12 @@ def test(xest, yest, robust, graph=False):
             axu.set_aspect(abs((x_right-x_left)/(y_low-y_high)*.8))
             axu.plot(xest[i], [model.get_rho(i, x)
                      for x in xest[i]], color="r")
-        a, b, c, d = Cal(xest[i], yest[i], robust, axu)
+        a, b, c, d, f = Cal(xest[i], yest[i], robust, axu)
         selects.append(a)
         mest.append(b)
         selects_nav.append(c)
         mest_nav.append(d)
+        F.append(f)
     if graph:
         plt.show()
     erev = model.get_expected_rev(selects)
@@ -97,7 +99,7 @@ def test(xest, yest, robust, graph=False):
     rrev = model.get_estimated_rev(selects, mest)
     rrev_n = model.get_estimated_rev(selects_nav, mest_nav)
 
-    return [erev, erev_n, rrev, rrev_n]
+    return [erev, erev_n, rrev, rrev_n, selects, selects_nav, F]
 
 
 def MeanResult(k):
@@ -119,9 +121,9 @@ def RangeTest():
 
 # RangeTest()
 
-xests, yests = single_company_data()
-res = test(xests, yests, robust=True, graph=False)
-print(res[0], res[1])
+# xests, yests = single_company_data()
+# res = test(xests, yests, robust=True, graph=True)
+# print(res[0], res[1])
 
 # xests, yests = custom_gdata(40)
 # res = test(xests, yests, robust=False, graph=True)
