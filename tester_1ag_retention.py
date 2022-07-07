@@ -33,11 +33,17 @@ def ReduceActionSpace(T, i=0, K=None, F=None):
     return ReduceActionSpace(T, i+1, K, F)
 
 
-D, F = ReduceActionSpace(10)
-S = []
-for x in D:
-    S.append((round(np.mean(
-        [F[xi](xv) for xi, xv in enumerate(x)]), 3), x, model.get_expected_rev(x)))
-S = sorted(S, key=lambda x: x[0], reverse=True)
-S = pd.DataFrame(S)
-S.to_excel("output.xlsx")
+def GetReduceSpace(save=False):
+    D, F = ReduceActionSpace(10)
+    S = []
+    for x in D:
+        S.append((round(np.mean(
+            [F[xi](xv) for xi, xv in enumerate(x)]), 3), x, model.get_expected_rev(x)))
+    S = sorted(S, key=lambda x: x[0], reverse=True)
+    if save:
+        S = pd.DataFrame(S)
+        S.to_excel("output.xlsx")
+    return S
+
+
+GetReduceSpace(1)
