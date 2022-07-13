@@ -5,7 +5,9 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.optimize import curve_fit
 from collections import namedtuple
+import pickle
 import warnings
+import os
 warnings.simplefilter("ignore")
 
 c1place = 0
@@ -15,6 +17,7 @@ customer = []
 rates = []
 hist = []
 customer_old = {}
+PATH_HIST = f"{os.path.abspath(os.path.dirname(__file__))}/hist.pickle"
 
 
 def Cus_Create():
@@ -29,7 +32,7 @@ def Cus_Create():
         else:
             threshold = rng.normal(.35, 0.1)
         customer.append(cstate._make(
-            (abs(r-c1place), abs(r-c2place), threshold)))
+            (abs(r - c1place), abs(r - c2place), threshold)))
     # pd.DataFrame(customer, columns=['B0dis', 'B1dis', 'Threshold']).to_excel(
     #     "p2/cusdata.xlsx")
 
@@ -53,7 +56,7 @@ iip, _ = curve_fit(ii_func, np.array(
     [0, 3]), np.array([.5, -.5]), method="dogbox")
 
 
-def Rev(a0, a1, a2, customer):
+def Rev(a0, a1, a2, customer, alter=True):
     ctr = 0
     for j in range(1000):
         c = customer[j]
@@ -70,32 +73,35 @@ def Rev(a0, a1, a2, customer):
             select = 1
         else:
             select = 2
-
         if select == 1:
             ctr += 1
-            customer[j] = c._replace(b0dis=abs(c.b0dis - .1),
-                                     b1dis=abs(c.b1dis + .1))
-        elif select == 2:
-            customer[j] = c._replace(b0dis=abs(c.b0dis + .1),
-                                     b1dis=abs(c.b1dis - .1))
-        else:
-            print("error")
+        if alter:
+            if select == 1:
+                customer[j] = c._replace(b0dis=abs(c.b0dis - .1),
+                                         b1dis=abs(c.b1dis + .1))
+            elif select == 2:
+                customer[j] = c._replace(b0dis=abs(c.b0dis + .1),
+                                         b1dis=abs(c.b1dis - .1))
+            else:
+                print("error")
 
     return ctr, int(ctr * 100000 * (II + ii_func(a2, *iip) - a0) / 100)
 
 
 def Hist_Create():
+    global hist
     rng = np.random.default_rng(0)
 
     for i in range(1000):
         a2 = rates[i]  # federal rate
-        a0 = round(a2 + .1 + rng.random()*(.9), 2)  # my rate
-        a1 = round(a2 + .1 + rng.random()*(.9), 2)  # opponent rate
+        a0 = round(a2 + .1 + rng.random() * (.9), 2)  # my rate
+        a1 = round(a2 + .1 + rng.random() * (.9), 2)  # opponent rate
         # a0 -> agent1利率, a1 -> agent2利率, a2 -> 最後一筆資料的利率, (b0dis, b1dis, threshold -> cusdata.xlsx對應資料), II -> 4
         ctr, revenue = Rev(a0, a1, a2, customer)
         if i + 1 >= 500 and (i + 1 - 500) % 10 == 0:
-            customer_old[i+1] = customer.copy()
+            customer_old[i + 1] = customer.copy()
         hist.append((a0, a1, a2, ctr, revenue))
+    hist = np.array(hist)
     pd.DataFrame(hist, columns=['my-rate', 'op-rate',
                  'federal rate', 'copies', 'rev']).astype({"my-rate": float, "op-rate": float, "federal rate": float, "copies": int, "rev": int},
                                                           copy=True).to_excel("p2/history_Rate.xlsx")
@@ -103,11 +109,15 @@ def Hist_Create():
 
 def arange(c0, c1, step=0.01):
     return list(map(lambda x: round(x, 2), np.linspace(
-        c0, c1, int((c1 - c0)/step)+1, endpoint=True)))
+        c0, c1, int((c1 - c0) / step) + 1, endpoint=True)))
 
 
 def Evaluate(h, a0):
-    return Rev(a0+hist[h-1][2], hist[h-1][1], hist[h-1][2], customer_old[h].copy())[1]
+    return Rev(a0 + hist[h - 1][2], hist[h - 1][1], hist[h - 1][2], customer_old[h], False)[1]
+
+
+def Evaluate_B(h, a0):
+    return Rev(a0, hist[h - 1][1], hist[h - 1][2], customer_old[h], False)[1]
 
 
 def MaxMin(h):
