@@ -13,14 +13,14 @@ warnings.simplefilter("ignore")
 c1place = 0
 c2place = 1
 II = 4
-customer = []
 rates = []
 hist = []
 customer_old = {}
-PATH_HIST = f"{os.path.abspath(os.path.dirname(__file__))}/hist.pickle"
+STP = 500
 
 
 def Cus_Create():
+    customer = []
     rng = np.random.default_rng(0)
     cstate = namedtuple('r', 'b0dis, b1dis, threshold')
     for i in range(1000):
@@ -33,6 +33,7 @@ def Cus_Create():
             threshold = rng.normal(.35, 0.1)
         customer.append(cstate._make(
             (abs(r - c1place), abs(r - c2place), threshold)))
+    return customer
     # pd.DataFrame(customer, columns=['B0dis', 'B1dis', 'Threshold']).to_excel(
     #     "p2/cusdata.xlsx")
 
@@ -91,14 +92,14 @@ def Rev(a0, a1, a2, customer, alter=True):
 def Hist_Create():
     global hist
     rng = np.random.default_rng(0)
-
+    customer = Cus_Create()
     for i in range(1000):
         a2 = rates[i]  # federal rate
         a0 = round(a2 + .1 + rng.random() * (.9), 2)  # my rate
         a1 = round(a2 + .1 + rng.random() * (.9), 2)  # opponent rate
         # a0 -> agent1利率, a1 -> agent2利率, a2 -> 最後一筆資料的利率, (b0dis, b1dis, threshold -> cusdata.xlsx對應資料), II -> 4
         ctr, revenue = Rev(a0, a1, a2, customer)
-        if i + 1 >= 500 and (i + 1 - 500) % 10 == 0:
+        if i + 1 >= STP and (i + 1) % 10 == 0:
             customer_old[i + 1] = customer.copy()
         hist.append((a0, a1, a2, ctr, revenue))
     hist = np.array(hist)
@@ -129,6 +130,5 @@ def MaxMin(h):
     return (rge[x], arr[x]), (rge[y], arr[y])
 
 
-Cus_Create()
 Rate_Create()
 Hist_Create()

@@ -34,8 +34,8 @@ class Split:
 
 hist = dc.hist
 D = []
-rdeltaScalar = MinMaxScaler().fit(A(hist[:, 0] - hist[:, 1]))
-fdeltaScalar = MinMaxScaler().fit(A(hist[:, 0] - hist[:, 2]))
+rdeltaScalar = MinMaxScaler().fit(A([.9, 0]))
+fdeltaScalar = MinMaxScaler().fit(A([1, .1]))
 
 for i in range(1000):
     data = hist[i]
@@ -83,7 +83,7 @@ class SplitQlearning:
             Q[s][action] = (1 - self.learning_rate) * Q[s][action] + \
                 self.learning_rate * (reward + maxQ)
             s = state_p
-            if i + 1 >= 500 and (i + 1) % 10 == 0:
+            if i + 1 >= dc.STP and (i + 1) % 10 == 0:
                 self.Q[i] = copy.deepcopy(Q)
 
     def request(self, h):
@@ -124,7 +124,7 @@ class UnitQlearning:
                 maxQ = self.gamma * DictMax(Q)[1]
             Q[action] = (1 - self.learning_rate) * Q[action] + \
                 self.learning_rate * (reward + maxQ)
-            if i + 1 >= 500 and (i + 1) % 10 == 0:
+            if i + 1 >= dc.STP and (i + 1) % 10 == 0:
                 self.Q[i] = copy.deepcopy(Q)
 
     def request(self, h):
@@ -157,7 +157,7 @@ def Compare(rest):
             2.55, 2.55, 1.68, 2.58, 1.19, 0.25, 0.15, 0.15, 0.15, 0.15, 0.16, 0.19, 0.18, 0.19, 0.2, 0.2, 0.19, 0.19, 0.19, 0.29, 1.09, 0.19, 1.08, 1.09, 1.09]
     ctr = 0
     c = []
-    for i in range(500, 500 + 500, 10):
+    for i in range(dc.STP, 1000, 10):
         if rest == None:
             rest = res1
         c += [GetPerformace(i, rest[ctr])]
@@ -190,7 +190,7 @@ def M1(H):
 
 def M2(H):
     if not hasattr(M2, "QL"):
-        M2.QL = [UnitQlearning(75, lr=.2, gamma=.5)]
+        M2.QL = [UnitQlearning(75, lr=.2, gamma=.6)]
     m = -1
     ql = M2.QL.copy()
     while m == -1 and len(ql) > 0:
@@ -201,5 +201,5 @@ def M2(H):
     return m
 
 
-r = [M2(i) for i in range(500, 1000, 10)]
+r = [M2(i) for i in range(dc.STP, 1000, 10)]
 Compare(r)
