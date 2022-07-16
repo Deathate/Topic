@@ -81,11 +81,11 @@ def Rev(h, a0, a1, change=True):
             select = 2
         elif d1 >= threshold and d2 < threshold:
             select = 1
-        elif (d1 - T * abs(cstates[group] - setting.c1place) > d2 - T * abs(cstates[group] - setting.c2place)):
+        elif (d1 - T * abs(setting.cstates[group] - setting.c1place) > d2 - T * abs(setting.cstates[group] - setting.c2place)):
             select = 1
-        elif (d1 - T * abs(cstates[group] - setting.c1place) < d2 - T * abs(cstates[group] - setting.c2place)):
+        elif (d1 - T * abs(setting.cstates[group] - setting.c1place) < d2 - T * abs(setting.cstates[group] - setting.c2place)):
             select = 2
-        elif (d1 - T * abs(cstates[group] - setting.c1place) == d2 - T * abs(cstates[group] - setting.c2place)):
+        elif (d1 - T * abs(setting.cstates[group] - setting.c1place) == d2 - T * abs(setting.cstates[group] - setting.c2place)):
             select = randomer.integers(1, 3)
 
         if select == 1:
@@ -97,12 +97,13 @@ def Rev(h, a0, a1, change=True):
     if change:
         for i, x in enumerate(amount):
             if x > 0:
-                cstates[i] -= .1
+                setting.cstates[i] -= .1
             if x < 0:
-                cstates[i] += .1
+                setting.cstates[i] += .1
     S = namedtuple("h", "a0,a1,copy0,copy1,rev0,rev1")
     sd = [a0, a1, ctr1, ctr2, int(ctr1 * 50000 * (setting.II + ii_func(a2, *iip) - a0) / 100),
           int(ctr2 * 50000 * (setting.II + ii_func(a2, *iip) - a1) / 100)]
+    setting.cstates = [.5] * 3
     return S._make(sd)
 
 
@@ -120,14 +121,16 @@ def Result(hist, name, show):
     hist = np.array(hist)
     if SAVEFIG or show:
         plt.style.use('ggplot')
-        fig, ax = plt.subplots(2, 1)
+        fig, ax = plt.subplots(3, 1)
         ax[0].plot(range(1000), hist[:, 4][5:], label="R1", color="blue", lw=2)
         ax[0].plot(range(1000), hist[:, 5][5:],
                    label="R2", color="orange", lw=2)
         ax[1].axhline(np.mean(hist[:, 4][5:]), color="blue", lw=3)
         ax[1].axhline(np.mean(hist[:, 5][5:]), color="orange", lw=3)
+        ax[2].plot(range(1000), hist[:, 0][5:], color="blue")
+        ax[2].plot(range(1000), hist[:, 1][5:], color="orange")
         fig.legend()
-        fig.set_size_inches(18, 10)
+        # fig.set_size_inches(18, 10)
         fig.suptitle(name, size=20)
         fig.savefig("p3/pct/" + name)
     if show:
@@ -138,5 +141,5 @@ def Result(hist, name, show):
 setting.c1place = 0
 setting.c2place = 1
 setting.II = 2.5
-cstates = [.5] * 3
+setting.cstates = [.5] * 3
 rates = Rate_Create()
