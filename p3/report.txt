@@ -1,0 +1,2 @@
+QLearning   vs      Bandit  --  1: 0
+[('QLearning', 1), ('Bandit', 0)]

@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 from collections import namedtuple
 warnings.simplefilter("ignore")
 
-cusseed = list(range(1000))
 cid = [0] * 300 + [1] * 400 + [2] * 300
 
 SAVEFIG = True
@@ -27,7 +26,7 @@ def arange(c0, c1, step=0.01):
 
 
 def Cus_Create(h):
-    rng = np.random.default_rng(cusseed[h])
+    rng = np.random.default_rng(h)
     customer = [rng.normal(.25, 0.036) for _ in range(300)] + \
         [rng.normal(.85, 0.053) for _ in range(400)] + \
         [rng.normal(1.25, 0.15) for _ in range(300)]
@@ -95,6 +94,7 @@ def Rev(h, a0, a1, change=True):
         for i, x in enumerate(amount):
             setting.cstates[i] -= x/400
             setting.cstates[i] -= (a0-a1)/2
+
             setting.cstates[i] = np.clip(setting.cstates[i], 0, 1)
     S = namedtuple("h", "a0,a1,copy0,copy1,rev0,rev1,rate")
     sd = [a0, a1, ctr1, ctr2, int(-(300000 + ctr1 * 1500) + ctr1 * 1000 * (setting.II + ii_func(a2, *iip) - a0)),
@@ -121,8 +121,14 @@ def Result(hist, name, show):
         ax[0].plot(range(1000), hist[:, 4], label="R1", color="orange")
         ax[0].plot(range(1000), hist[:, 5],
                    label="R2", color="blue")
-        ax[1].axhline(np.mean(hist[:, 4]), color="orange", lw=3)
-        ax[1].axhline(np.mean(hist[:, 5]), color="blue", lw=3)
+        ax[0].set_xticks(range(0, 1001, 100))
+        ax[1].plot(range(1000), [sum(hist[:, 4][:i+1])
+                   for i in range(1000)], color="orange")
+        ax[1].plot(range(1000), [sum(hist[:, 5][:i+1])
+                                 for i in range(1000)], color="blue")
+        # ax[1].axhline(np.mean(hist[:, 4]), color="orange", lw=3)
+        # ax[1].axhline(np.mean(hist[:, 5]), color="blue", lw=3)
+        ax[1].set_xticks([])
         ax[2].plot(range(1000), hist[:, 0], color="orange")
         ax[2].plot(range(1000), hist[:, 1], color="blue")
         ax[2].plot(range(1000), rates, color="green",

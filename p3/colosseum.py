@@ -1,19 +1,28 @@
 
+from itertools import chain
 from collections import namedtuple
 import DataCenter as dc
 from DataCenter import Starter
 import numpy as np
-from itertools import combinations, permutations
+import itertools
+from itertools import combinations
 import time
+import multiprocessing as mp
+from multiprocessing import Process
 from multiprocess import Pool
 from sklearn.linear_model import LinearRegression
 from tqdm import tqdm
 import pandas as pd
 import sys
 import warnings
+from sklearn.cluster import KMeans, MiniBatchKMeans
+import collections
+from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
+import pickle
+import math
 
 warnings.simplefilter("ignore")
-rng = np.random.default_rng(0)
 
 
 def A(arr, v=1):
@@ -22,24 +31,33 @@ def A(arr, v=1):
     return arr.reshape(-1, v)
 
 
-def FilterData(**data):
-    hist = data["hist"][-1]
-    state = namedtuple("d", "mrate, orate, mcopy, ocopy, mrev, orev")
-    if data["id"] == 0:
-        return state._make((hist.a0, hist.a1, hist.copy0, hist.copy1, hist.rev0, hist.rev1))
-    elif data["id"] == 1:
-        return state._make((hist.a1, hist.a0, hist.copy1, hist.copy0, hist.rev1, hist.rev0))
+def static(**kwargs):
+    def decorate(func):
+        for k in kwargs:
+            setattr(func, k, kwargs[k])
+        return func
+    return decorate
 
 
-def FilterDataAll(**data):
-    state = namedtuple("d", "mrate, orate, mcopy, ocopy, mrev, orev")
+@static(ctr=0)
+def create_rng(func):
+    if not hasattr(func, "rng"):
+        func.rng = np.random.default_rng(create_rng.ctr)
+        create_rng.ctr += 1
+    return func
+
+
+def FilterDataAll(l, **data):
+    if len(data["hist"]) < -l:
+        raise RuntimeError()
+    state = namedtuple("d", "mrate, orate, mcopy, ocopy, mrev, orev, rate")
     d = []
     if data["id"] == 0:
         d = [state._make((hist.a0, hist.a1, hist.copy0, hist.copy1,
-                         hist.rev0, hist.rev1)) for hist in data["hist"]]
+                          hist.rev0, hist.rev1, hist.rate)) for hist in data["hist"][l:]]
     elif data["id"] == 1:
         d = [state._make((hist.a1, hist.a0, hist.copy1, hist.copy0,
-                         hist.rev1, hist.rev0)) for hist in data["hist"]]
+                          hist.rev1, hist.rev0, hist.rate)) for hist in data["hist"][l:]]
     return d
 
 
@@ -55,26 +73,31 @@ def Min(**data):
     return data["currate"]
 
 
-def Random(**data):
-    return data["currate"] + rng.uniform(0, 2)
+@create_rng
+def Random(rng=None, **data):
+    if not rng:
+        return data["currate"] + Random.rng.uniform(0, dc.setting.II)
+    else:
+        return data["currate"] + rng.uniform(0, dc.setting.II)
 
 
+@create_rng
 def OponentBase(**data):
     hist = data["hist"]
     if not hist:
-        return Random(**data)
+        return Random(OponentBase.rng, **data)
     else:
-        fd = FilterData(**data)
+        fd = FilterDataAll(-1, **data)[0]
         return fd.orate + .1
 
 
+@create_rng
 def OponentBaseDynamic(**data):
     hist = data["hist"]
-
     if not hist:
-        return Random(**data)
+        return Random(OponentBaseDynamic.rng, **data)
     else:
-        fd = FilterData(**data)
+        fd = FilterDataAll(-1, **data)[0]
         if fd.mrev < fd.orev:
             if fd.mcopy < fd.ocopy:
                 return fd.orate + .3
@@ -93,95 +116,108 @@ def OponentBaseDynamic(**data):
                     return data["currate"]
 
 
-def Chen1(**data):
-    hist = data["hist"]
-    if not hist:
-        return Random(**data)
-    else:
-        if data["id"] == 0:
-            myrates = [x.a0 for x in hist]
-        elif data["id"] == 1:
-            myrates = [x.a1 for x in hist]
-        m = np.mean(myrates)
-        return m
+# def Chen1(**data):
+#     hist = data["hist"]
+#     if not hist:
+#         return Random(**data)
+#     else:
+#         fd = FilterDataAll(-20, **data)
+#         m = np.mean([x.mrate for x in fd])
+#         return m
 
 
-def Chen2(**data):
-    hist = data["hist"]
-    if not hist:
-        return Random(**data)
-    else:
-        if data["id"] == 0:
-            myrates = [x.a0 for x in hist]
-        elif data["id"] == 1:
-            myrates = [x.a1 for x in hist]
-        m = np.sum(myrates) * 0.5
-        return m
+# def Chen2(**data):
+#     hist = data["hist"]
+#     if not hist:
+#         return Random(**data)
+#     else:
+#         if data["id"] == 0:
+#             myrates = [x.a0 for x in hist]
+#         elif data["id"] == 1:
+#             myrates = [x.a1 for x in hist]
+#         m = np.sum(myrates) * 0.5
+#         return m
 
-
+@create_rng
 def Chen3(**data):
     hist = data["hist"]
     if not hist:
-        return Random(**data)
+        return Random(Chen3.rng, **data)
     else:
         hist = hist[-1]
         m = (hist.a0 + hist.a1) / 2
         return m
 
 
+@create_rng
 def ES(**data):
     hist = data["hist"]
-    if not hist or len(hist) <= 2:
-        return Random(**data)
+    if not hist or len(hist) <= 5:
+        return Random(ES.rng, **data)
     else:
-        if data["id"] == 0:
-            st = np.mean([x.a0 for x in hist[:-1]])
-            yt = hist[-1].a0
-        elif data["id"] == 1:
-            st = np.mean([x.a1 for x in hist[:-1]])
-            yt = hist[-1].a1
+        fd = FilterDataAll(-5, **data)
+        st = np.mean([x.mrate for x in fd[:-1]])
+        yt = fd[-1].mrate
         alpha = .9
         m = alpha * yt + (1-alpha) * st
         return m
 
 
-def Chen5(**data):
+@create_rng
+def ME(**data):
     hist = data["hist"]
-    if not hist:
-        return Random(**data)
+    if not hist or len(hist) <= 5:
+        return Random(ME.rng, **data)
     else:
-        if data["id"] == 0:
-            myrates = [x.a1 for x in hist]
-        elif data["id"] == 1:
-            myrates = [x.a0 for x in hist]
-        m = np.mean(myrates) + .2
+        fd = FilterDataAll(-5, **data)
+        m = np.mean([x.orate for x in fd])
         return m
 
 
+@create_rng
+def Chen5(**data):
+    hist = data["hist"]
+    if not hist or len(hist) <= 20:
+        return Random(Chen5.rng, **data)
+    else:
+        fd = FilterDataAll(-20, **data)
+        m = np.mean([x.orate for x in fd]) + .2
+        return m
+
+
+@create_rng
 def Chen6(**data):
-    return Chen3(**data) + .2
+    hist = data["hist"]
+    if not hist:
+        return Random(Chen6.rng, **data)
+    else:
+        hist = hist[-1]
+        m = (hist.a0 + hist.a1) / 2
+        return m + .2
 
 
+@create_rng
 def Chiang1(**data):
     hist = data["hist"]
     if not hist or len(hist) <= 10:
-        return Random(**data)
+        return Random(Chiang1.rng, **data)
     else:
-        fd = FilterDataAll(**data)
+        fd = FilterDataAll(0, **data)
         X = A([x.orate for x in fd])
         Y = A([x.mrate for x in fd])
-        ft = np.mean([x.orate for x in fd]) + .1
+        ft = np.mean([x.orate for x in fd[-10:]]) + .1
         reg = LinearRegression().fit(X, Y)
         m = reg.predict(A(ft))[0, 0]
         return m
 
 
+@create_rng
 def Chiang2(**data):
     hist = data["hist"]
     if not hist or len(hist) <= 10:
-        return Random(**data)
+        return Random(Chiang2.rng, **data)
     else:
-        fd = FilterDataAll(**data)
+        fd = FilterDataAll(0, **data)
         X1 = A([x.orate for x in fd])
         X2 = A(data["rates"])
         X = np.hstack((X1, X2))
@@ -192,56 +228,226 @@ def Chiang2(**data):
         return m
 
 
-def OneOneContest(ma, mb, show=False):
+class Split:
+    def __init__(self, a, b, step):
+        self.line = np.linspace(a, b, step, endpoint=True)
+
+    def predict(self, v):
+        return np.argmin(np.absolute(self.line - v))
+
+    def map(self, v):
+        return self.line[v]
+
+    def __len__(self):
+        return len(self.line)
+
+
+class BanditProblem:
+    def __init__(self, upb):
+        self.Q = collections.defaultdict(int)
+        self.upb = upb
+        self.rdeltaScalar = Split(0, upb, int(upb/.2) + 1)
+        self.fdeltaScalar = Split(0, upb, int(upb/.5) + 1)
+
+    def Fit(self, fd):
+        self.fd = fd
+        d = fd[-1]
+        reward = d.mrev - d.orev
+        rdelta = self.rdeltaScalar.predict(d.mrate - d.orate)
+        fdelta = self.fdeltaScalar.predict(d.mrate - d.rate)
+        action = (rdelta, fdelta)
+        self.Q[action] = reward
+        return self
+
+    def DictMax(self, d):
+        return (k := max(d, key=d.get), d[k])
+
+    def predict(self, nrate):
+        data = self.fd[-1]
+        fresult = {}
+        for i in dc.arange(0, self.upb, 0.1):
+            rdelta = self.rdeltaScalar.predict(nrate + i - data.orate)
+            fdelta = self.fdeltaScalar.predict(i)
+            l = (rdelta, fdelta)
+            if l in self.Q:
+                fresult[i] = self.Q[l]
+        if fresult:
+            qstar = self.DictMax(fresult)
+            if qstar[1] > 0:
+                return qstar[0] + nrate
+        return None
+
+
+@create_rng
+def Bandit(**data):
+    if not hasattr(Bandit, "bp"):
+        Bandit.bp = BanditProblem(dc.setting.II)
+    hist = data["hist"]
+    if not hist:
+        return Random(Bandit.rng, **data)
+    else:
+        fd = FilterDataAll(0, **data)
+        m = Bandit.bp.Fit(fd).predict(data["currate"])
+        if m:
+            return m
+        else:
+            return Random(**data)
+
+
+class QLearningProblem:
+    def __init__(self, upb, lr=1, gamma=.4):
+        self.Q = collections.defaultdict(lambda: collections.defaultdict(int))
+        self.learning_rate = lr
+        self.gamma = gamma
+        self.ofdeltaScalar = Split(0, upb, int(upb / .15) + 1)
+        self.Nt = collections.defaultdict(lambda: collections.defaultdict(int))
+        self.ctr = 0
+
+    def Fit(self, fd):
+        self.ctr += 1
+        self.fd = fd
+        d = fd[-1]
+        reward = d.mrev - d.orev
+        s = d.rate
+        self.laststate = s
+        action = self.ofdeltaScalar.predict(d.mrate - d.rate)
+        self.Nt[s][action] = self.ctr
+        maxQ = self.gamma * self.DictMax(self.Q[s])[1] if self.Q[s] else 0
+        self.Q[s][action] = (1 - self.learning_rate) * self.Q[s][action] + \
+            self.learning_rate * (reward + maxQ)
+        return self
+
+    def DictMax(self, d):
+        return (k := max(d, key=d.get), d[k])
+
+    def DictMin(self, d):
+        return (k := min(d, key=d.get), d[k])
+
+    def predict(self, nrate):
+        data = self.fd[-1]
+        s = data.rate
+
+        if self.Q[s]:
+            m = self.DictMax(self.Q[s])
+            if m[1] > 0:
+                return self.ofdeltaScalar.map(m[0]) + nrate
+            # else:
+            #     lsm = self.DictMin({k: self.Nt[s][k] for k in self.Q[s]})
+            #     return self.ofdeltaScalar.map(lsm[0]) + nrate
+        return None
+
+
+@create_rng
+def QLearning(**data):
+    if not hasattr(QLearning, "bp"):
+        QLearning.bp = QLearningProblem(dc.setting.II)
+    hist = data["hist"]
+    if not hist:
+        return Random(QLearning.rng, **data)
+    else:
+        fd = FilterDataAll(0, **data)
+        m = QLearning.bp.Fit(fd).predict(data["currate"])
+        if m:
+            return m
+        else:
+            return Random(**data)
+################################################################################################################
+
+
+def OneOneContest(queue, sema, ma, mb, show=False):
     rates = dc.rates
     hist = Starter()
     for i in range(1000):
-        a0 = ma(currate=rates[i], id=0, hist=hist, rates=rates[:i])
-        a1 = mb(currate=rates[i], id=1, hist=hist, rates=rates[:i])
+        a0 = ma(currate=rates[i], id=0, hist=hist,
+                rates=rates[:i], timestep=i+1)
+        a1 = mb(currate=rates[i], id=1, hist=hist,
+                rates=rates[:i], timestep=i+1)
         a0 = np.clip(a0, rates[i], rates[i] + dc.setting.II)
         a1 = np.clip(a1, rates[i], rates[i] + dc.setting.II)
+
         hist.append(dc.Rev(i, a0, a1))
     pd.DataFrame(hist, columns=[ma.__name__, mb.__name__,
                  'copy0', 'copy1', 'rev0', 'rev1', 'rate']).to_excel("p3/hist.xlsx")
-    return dc.Result(hist, "_".join([ma.__name__, mb.__name__]), show=show)
+    queue.put(((ma.__name__, mb.__name__), dc.Result(
+        hist, "_".join([ma.__name__, mb.__name__]), show=show)))
+    sema.release()
 
 
-# Middle, Max, Min, Random, OponentBase, Chen1, Chen2, Chen3, Chen4, Chen5, Chen6
-battleList = [OponentBaseDynamic, OponentBase, ES,
-              Chen1, Chen3, Chen5, Chen6, Chiang1, Chiang2]
-# OponentBase, Chen3, OponentBaseDynamic, Chen5
-# battleList = [OponentBaseDynamic, Chen3, OponentBase, Chen5]
-# battleList = [OponentBase, Chiang1, Chiang2]
-
-
-def NNContest():
+@static(queue=mp.Queue(), sema=mp.Semaphore(20))
+def NNContest(battleList):
     dc.ClearGraph()
-    print("".ljust(40, "-"))
-    maxLength = max(
-        map(lambda x: len(x), [x.__name__ for x in battleList])) + 2
-    comb = list(combinations(battleList, 2))
-    results = []
-    with Pool() as p:
-        for result in tqdm(p.imap(lambda args: OneOneContest(*args), comb), total=len(comb)):
-            results.append(result)
-    result = {x: 0 for x in battleList}
-    for i, x in enumerate(comb):
-        contest_result = results[i]
-        if contest_result == 1 or contest_result == 3:
-            result[x[0]] += 1
-        if contest_result == 2 or contest_result == 3:
-            result[x[1]] += 1
-        # # show process
-        txt = [[x[0].__name__, int(contest_result == 1 or contest_result == 3)], [
-            x[1].__name__, int(contest_result == 2 or contest_result == 3)]]
-        # txt = sorted(txt, key=lambda s: s[0])
-        print(
-            f"{txt[0][0]:<{maxLength}} vs {txt[1][0]:>{maxLength}}" + f"  --  {txt[0][1]}: {txt[1][1]}")
-    result = sorted(result.items(), key=lambda x: x[1], reverse=True)
-    result = list(map(lambda x: (x[0].__name__, x[1]), result))
-    print("".ljust(40, "-"))
-    print(result)
+    with open("p3/report.txt", "w") as f:
+        print("".ljust(40, "-"))
+        maxLength = max(
+            map(lambda x: len(x), [x.__name__ for x in battleList])) + 2
+        comb = list(combinations(battleList, 2))
+        results = []
+        if len(comb) > 1:
+            for job in tqdm(comb):
+                NNContest.sema.acquire()
+                p1 = Process(target=OneOneContest, args=(
+                    NNContest.queue, NNContest.sema, *job,))
+                p1.start()
+        else:
+            OneOneContest(NNContest.queue, NNContest.sema, *comb[0])
+        results = [NNContest.queue.get() for _ in comb]
+
+        result = {x.__name__: 0 for x in battleList}
+        table = {}
+        for (ma, mb), x in results:
+            result[ma] += (x == 1 or x == 3)
+            result[mb] += (x == 2 or x == 3)
+            txt = [int(x == 1 or x == 3), int(x == 2 or x == 3)]
+            print(
+                f"{ma:<{maxLength}} vs {mb:>{maxLength}}" + f"  --  {txt[0]}: {txt[1]}")
+            print(
+                f"{ma:<{maxLength}} vs {mb:>{maxLength}}" + f"  --  {txt[0]}: {txt[1]}", file=f)
+            table[(ma, mb)] = (x == 1 or x == 3)
+        result = sorted(result.items(), key=lambda x: x[1], reverse=True)
+        print("".ljust(40, "-"))
+        print(result)
+        print(result, file=f)
+
+    with open("result.pickle", "wb") as f:
+        pickle.dump((result, table), f)
+
+
+def GShow():
+    with open("result.pickle", "rb") as f:
+        result, table = pickle.load(f)
+    namelist = [x[0] for x in result]
+    cellColours = []
+    for i in range(len(namelist)):
+        cellColours.append([])
+        for j in range(len(namelist)):
+            if i == j:
+                cellColours[-1].append("#2C3E50")
+            else:
+                if (namelist[i], namelist[j]) in table:
+                    cellColours[-1].append(
+                        "#56b5fd" if table[namelist[i], namelist[j]] else "#EC7063")
+                elif (namelist[j], namelist[i]) in table:
+                    cellColours[-1].append(
+                        "#EC7063" if table[namelist[j], namelist[i]] else "#56b5fd")
+                else:
+                    cellColours[-1].append("#F9E79F")
+
+    fig, ax = plt.subplots(1, 1)
+    namelist = list(map(lambda x: x.replace(
+        'OponentBaseDynamic', 'OBD'), namelist))
+    t = ax.table(cellText=A([""]*(len(namelist)**2), len(namelist)), colLabels=namelist,
+                 rowLabels=namelist, loc="center", cellColours=cellColours)
+    t.auto_set_font_size(False)
+    t.set_fontsize(11)
+    ax.axis("off")
+    plt.show()
+    fig, ax = plt.subplots(1, 1)
+    ax.bar([x[0] for x in result], [x[1] for x in result], color="r")
 
 
 if __name__ == '__main__':
-    NNContest()
+    battleList = [Chiang1, Chiang2, Middle, Min, Max,
+                  Random, ES, ME, Chen5, Chen6, Bandit, QLearning, OponentBase, OponentBaseDynamic]
+    battleList = [QLearning, Bandit]
+    NNContest(battleList)
+    # GShow()
