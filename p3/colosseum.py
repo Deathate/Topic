@@ -40,11 +40,15 @@ def static(**kwargs):
     return decorate
 
 
+def getrng():
+    create_rng.ctr += 1
+    return np.random.default_rng(create_rng.ctr)
+
+
 @static(ctr=0)
 def create_rng(func):
     if not hasattr(func, "rng"):
-        func.rng = np.random.default_rng(create_rng.ctr)
-        create_rng.ctr += 1
+        func.rng = getrng()
     return func
 
 
@@ -299,24 +303,25 @@ class QLearningProblem:
     def __init__(self, upb, lr=1, gamma=.4):
         self.learning_rate = lr
         self.gamma = gamma
-        self.ofdeltaScalar = Split(0, upb, int(upb / .15) + 1)
+        self.ofdeltaScalar = Split(0, upb, int(upb / .5) + 1)
+        self.actScalar = Split(-2, 2, 10)
         self.Q = collections.defaultdict(
-            lambda: {i: 0 for i in range(len(self.ofdeltaScalar))})
+            lambda: {i: 0 for i in range(len(self.actScalar))})
         self.Nt = collections.defaultdict(
             lambda: collections.defaultdict(lambda: 0))
         self.ctr = 0
-        self.lastS = None
         self.exploration = 1
+        self.rng = getrng()
+
+    def State(self, d):
+        return d.rate, self.ofdeltaScalar.predict(d.orate - d.rate)
 
     def Fit(self, fd):
         self.fd = fd
         d = fd[-1]
         reward = d.mrev - d.orev
-        s = d.rate
-        # if self.lastS and not self.Q[s]:
-        #     self.Q[s] = copy.deepcopy(self.Q[self.lastS])
-        self.lastS = s
-        action = self.ofdeltaScalar.predict(d.mrate - d.rate)
+        s = self.State(d)
+        action = self.actScalar.predict(d.mrate - d.orate)
         self.Nt[s][action] += 1
         maxQ = self.gamma * self.DictMax(self.Q[s])[1] if self.Q[s] else 0
         self.Q[s][action] = (1 - self.learning_rate) * self.Q[s][action] + \
@@ -336,19 +341,21 @@ class QLearningProblem:
         return math.sqrt(math.log(timestep)/nt)
 
     def predict(self, nrate):
-        data = self.fd[-1]
-        s = data.rate
+        d = self.fd[-1]
+        s = self.State(d)
 
         m = self.DictMax(self.Q[s])
-        if m[1] > 50000:
-            self.exploration = 0
+        if m[1] > 20000:
+            return self.actScalar.map(m[0]) + d.orate
+
+        if self.rng.random() < .35:
+            scalar = MinMaxScaler().fit(
+                A([self.DictMax(self.Q[s])[1], self.DictMin(self.Q[s])[1]]))
+            lsm = self.DictMax(
+                {x: scalar.transform(A(self.Q[s][x]))[0, 0] + self.exploration * self.Uncertainty(self.ctr, self.Nt[s][x]) for x in self.Q[s]})
+            return self.actScalar.map(lsm[0]) + d.orate
         else:
-            self.exploration = 1
-        scalar = MinMaxScaler().fit(
-            A([self.DictMax(self.Q[s])[1], self.DictMin(self.Q[s])[1]]))
-        lsm = self.DictMax(
-            {x: scalar.transform(A(self.Q[s][x]))[0, 0] + self.exploration * self.Uncertainty(self.ctr, self.Nt[s][x]) for x in self.Q[s]})
-        return self.ofdeltaScalar.map(lsm[0]) + nrate
+            return self.actScalar.map(self.rng.integers(len(self.actScalar))) + d.orate
 
 
 @create_rng
