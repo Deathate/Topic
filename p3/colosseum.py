@@ -21,6 +21,7 @@ from sklearn.preprocessing import MinMaxScaler
 import matplotlib.pyplot as plt
 import pickle
 import math
+import copy
 
 warnings.simplefilter("ignore")
 
@@ -296,25 +297,31 @@ def Bandit(**data):
 
 class QLearningProblem:
     def __init__(self, upb, lr=1, gamma=.4):
-        self.Q = collections.defaultdict(lambda: collections.defaultdict(int))
         self.learning_rate = lr
         self.gamma = gamma
         self.ofdeltaScalar = Split(0, upb, int(upb / .15) + 1)
-        self.Nt = collections.defaultdict(lambda: collections.defaultdict(int))
+        self.Q = collections.defaultdict(
+            lambda: {i: 0 for i in range(len(self.ofdeltaScalar))})
+        self.Nt = collections.defaultdict(
+            lambda: collections.defaultdict(lambda: 0))
         self.ctr = 0
+        self.lastS = None
+        self.exploration = 1
 
     def Fit(self, fd):
-        self.ctr += 1
         self.fd = fd
         d = fd[-1]
         reward = d.mrev - d.orev
         s = d.rate
-        self.laststate = s
+        # if self.lastS and not self.Q[s]:
+        #     self.Q[s] = copy.deepcopy(self.Q[self.lastS])
+        self.lastS = s
         action = self.ofdeltaScalar.predict(d.mrate - d.rate)
-        self.Nt[s][action] = self.ctr
+        self.Nt[s][action] += 1
         maxQ = self.gamma * self.DictMax(self.Q[s])[1] if self.Q[s] else 0
         self.Q[s][action] = (1 - self.learning_rate) * self.Q[s][action] + \
             self.learning_rate * (reward + maxQ)
+        self.ctr += 1
         return self
 
     def DictMax(self, d):
@@ -323,18 +330,25 @@ class QLearningProblem:
     def DictMin(self, d):
         return (k := min(d, key=d.get), d[k])
 
+    def Uncertainty(self, timestep, nt):
+        if nt == 0:
+            return sys.float_info.max
+        return math.sqrt(math.log(timestep)/nt)
+
     def predict(self, nrate):
         data = self.fd[-1]
         s = data.rate
 
-        if self.Q[s]:
-            m = self.DictMax(self.Q[s])
-            if m[1] > 0:
-                return self.ofdeltaScalar.map(m[0]) + nrate
-            # else:
-            #     lsm = self.DictMin({k: self.Nt[s][k] for k in self.Q[s]})
-            #     return self.ofdeltaScalar.map(lsm[0]) + nrate
-        return None
+        m = self.DictMax(self.Q[s])
+        if m[1] > 50000:
+            self.exploration = 0
+        else:
+            self.exploration = 1
+        scalar = MinMaxScaler().fit(
+            A([self.DictMax(self.Q[s])[1], self.DictMin(self.Q[s])[1]]))
+        lsm = self.DictMax(
+            {x: scalar.transform(A(self.Q[s][x]))[0, 0] + self.exploration * self.Uncertainty(self.ctr, self.Nt[s][x]) for x in self.Q[s]})
+        return self.ofdeltaScalar.map(lsm[0]) + nrate
 
 
 @create_rng
@@ -375,7 +389,7 @@ def OneOneContest(queue, sema, ma, mb, show=False):
 
 @static(queue=mp.Queue(), sema=mp.Semaphore(20))
 def NNContest(battleList):
-    dc.ClearGraph()
+    # dc.ClearGraph()
     with open("p3/report.txt", "w") as f:
         print("".ljust(40, "-"))
         maxLength = max(
