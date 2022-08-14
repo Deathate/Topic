@@ -1,4 +1,2 @@
-QLearning        vs   PolicyGradient  --  1: 0
-QLearning        vs           Bandit  --  1: 0
-Bandit           vs   PolicyGradient  --  1: 0
-[('QLearning', 2), ('Bandit', 1), ('PolicyGradient', 0)]
+QLearning   vs      Bandit  --  1: 0
+[('QLearning', 1), ('Bandit', 0)]

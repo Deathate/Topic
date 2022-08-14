@@ -301,10 +301,10 @@ def Bandit(**data):
 
 
 class QLearningProblem:
-    def __init__(self, upb, lr=1, gamma=.4):
+    def __init__(self, upb, lr=.6, gamma=.4):
         self.learning_rate = lr
         self.gamma = gamma
-        self.ofdeltaScalar = Split(0, upb, int(upb / .5) + 1)
+        self.ofdeltaScalar = Split(0, upb, int(upb / .3) + 1)
         self.actScalar = Split(-2, 2, 10)
         self.Q = collections.defaultdict(
             lambda: {i: 0 for i in range(len(self.actScalar))})
@@ -315,7 +315,7 @@ class QLearningProblem:
         self.rng = getrng()
 
     def State(self, d):
-        return d.rate, self.ofdeltaScalar.predict(d.orate - d.rate)
+        return Split(0, 10, int(10 / .5) + 1).predict(d.rate), self.ofdeltaScalar.predict(d.orate - d.rate)
 
     def Fit(self, fd):
         self.fd = fd
@@ -346,10 +346,11 @@ class QLearningProblem:
         s = self.State(d)
 
         m = self.DictMax(self.Q[s])
-        if m[1] > 20000:
+        if m[1] > 25000:
             return self.actScalar.map(m[0]) + d.orate
 
-        if self.rng.random() < .35:
+        if self.rng.random() < .25:
+            self.exploration = 1
             scalar = MinMaxScaler().fit(
                 A([self.DictMax(self.Q[s])[1], self.DictMin(self.Q[s])[1]]))
             lsm = self.DictMax(
@@ -490,7 +491,7 @@ def OneOneContest(queue, sema, ma, mb, show=False):
 
 @static(queue=mp.Queue(), sema=mp.Semaphore(20))
 def NNContest(battleList):
-    dc.ClearGraph()
+    # dc.ClearGraph()
     with open("p3/report.txt", "w") as f:
         print("".ljust(40, "-"))
         maxLength = max(
@@ -563,6 +564,6 @@ def GShow():
 if __name__ == '__main__':
     battleList = [Chiang1, Chiang2, Middle, Min, Max,
                   Random, ES, ME, Chen5, Chen6, Bandit, QLearning, OponentBase, OponentBaseDynamic]
-    battleList = [QLearning, Bandit, PolicyGradient]
+    battleList = [QLearning, Bandit]
     NNContest(battleList)
-    GShow()
+    # GShow()
