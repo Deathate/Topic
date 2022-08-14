@@ -15,6 +15,7 @@ from tqdm import tqdm
 import pandas as pd
 import sys
 import warnings
+from sklearn import preprocessing
 from sklearn.cluster import KMeans, MiniBatchKMeans
 import collections
 from sklearn.preprocessing import MinMaxScaler
@@ -372,6 +373,99 @@ def QLearning(**data):
             return m
         else:
             return Random(**data)
+
+
+class LinearSoftmaxAgent(object):
+    def __init__(self, state_size, action_size):
+        self.rng = getrng()
+        self.state_size = state_size
+        self.action_size = action_size
+        self.states = []
+        self.actions = []
+        self.rewards = []
+        self.theta = self.rng.random(state_size * action_size)
+        self.alpha = .01
+        self.gamma = .99
+
+    def hasState(self):
+        return self.states
+
+    def store(self, state, action):
+        self.states.append(state)
+        self.actions.append(action)
+
+    def storeReward(self, reward):
+        self.rewards.append(reward)
+
+    def _phi(self, s, a):
+        encoded = np.zeros([self.action_size, self.state_size])
+        encoded[a] = s
+        return encoded.flatten()
+
+    def pi(self, s):
+        z = [self.theta.dot(self._phi(s, a)) /
+             1000 for a in range(self.action_size)]
+        weights = np.array([np.exp(z[a])
+                           for a in range(self.action_size)])
+        return weights / np.sum(weights)
+
+    def act(self, state):
+        probs = self.pi(state)
+        a = self.rng.choice(range(0, self.action_size), p=probs)
+        return (a, probs[a])
+
+    def _gradient(self, s, a):
+        expected = 0
+        probs = self.pi(s)
+        for b in range(0, self.action_size):
+            expected += probs[b] * self._phi(s, b)
+        return self._phi(s, a) - expected
+
+    def _R(self, t):
+        total = 0
+        for tau in range(t, len(self.rewards)):
+            total += self.gamma**(tau - t) * self.rewards[tau]
+        return total
+
+    def train(self):
+        self.rewards = preprocessing.scale(
+            A(self.rewards)).flatten()
+        for t in range(len(self.states)):
+            s = self.states[t]
+            a = self.actions[t]
+            r = self._R(t)
+            grad = self._gradient(s, a)
+            self.theta += self.alpha * r * grad
+        self.states = []
+        self.actions = []
+        self.rewards = []
+
+
+@ create_rng
+def PolicyGradient(**data):
+    if not hasattr(PolicyGradient, "bp"):
+        PolicyGradient.stateScalar = Split(
+            0, dc.setting.II, int(dc.setting.II / .5) + 1)
+        PolicyGradient.actScalar = Split(
+            0, dc.setting.II, int(dc.setting.II / 1) + 1)
+        PolicyGradient.bp = LinearSoftmaxAgent(
+            len(PolicyGradient.stateScalar), len(PolicyGradient.actScalar))
+    hist = data["hist"]
+    if not hist:
+        return Random(PolicyGradient.rng, **data)
+    else:
+        fd = FilterDataAll(0, **data)[-1]
+        if PolicyGradient.bp.hasState():
+            reward = fd.mrev - fd.orev
+            PolicyGradient.bp.storeReward(reward)
+            if data["timestep"] % 20 == 0:
+                PolicyGradient.bp.train()
+
+        state = PolicyGradient.stateScalar.predict(fd.rate)
+        action, prob = PolicyGradient.bp.act(state)
+
+        PolicyGradient.bp.store(state, action)
+        return PolicyGradient.actScalar.map(action) + data["currate"]
 ################################################################################################################
 
 
@@ -396,7 +490,7 @@ def OneOneContest(queue, sema, ma, mb, show=False):
 
 @static(queue=mp.Queue(), sema=mp.Semaphore(20))
 def NNContest(battleList):
-    # dc.ClearGraph()
+    dc.ClearGraph()
     with open("p3/report.txt", "w") as f:
         print("".ljust(40, "-"))
         maxLength = max(
@@ -469,6 +563,6 @@ def GShow():
 if __name__ == '__main__':
     battleList = [Chiang1, Chiang2, Middle, Min, Max,
                   Random, ES, ME, Chen5, Chen6, Bandit, QLearning, OponentBase, OponentBaseDynamic]
-    battleList = [QLearning, Bandit]
+    battleList = [QLearning, Bandit, PolicyGradient]
     NNContest(battleList)
-    # GShow()
+    GShow()
