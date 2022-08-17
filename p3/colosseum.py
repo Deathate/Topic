@@ -346,21 +346,31 @@ class QLearningProblem:
         s = self.State(d)
 
         m = self.DictMax(self.Q[s])
-        if m[1] > 25000:
+        if m[1] > 10000:
             return self.actScalar.map(m[0]) + d.orate
-
-        if self.rng.random() < .25:
-            self.exploration = 1
+        if self.rng.random() < .1:
+            self.exploration = 0
             scalar = MinMaxScaler().fit(
                 A([self.DictMax(self.Q[s])[1], self.DictMin(self.Q[s])[1]]))
             lsm = self.DictMax(
                 {x: scalar.transform(A(self.Q[s][x]))[0, 0] + self.exploration * self.Uncertainty(self.ctr, self.Nt[s][x]) for x in self.Q[s]})
             return self.actScalar.map(lsm[0]) + d.orate
         else:
-            return self.actScalar.map(self.rng.integers(len(self.actScalar))) + d.orate
+            arr = [self.Q[s][x] for x in self.Q[s]]
+            scalar = MinMaxScaler().fit(
+                A([max(arr), min(arr)]))
+            prob = [math.exp(scalar.transform(A(x))[0, 0])
+                    for x in arr]
+            sigma = sum(prob)
+            prob = list(map(lambda x: x/sigma, prob))
+            choice = self.rng.choice([x for x in self.Q[s]], p=prob)
+            # print(prob[choice])
+            # if prob[choice] < 0.1:
+            #     print(prob)
+            return self.actScalar.map(choice) + d.orate
 
 
-@create_rng
+@ create_rng
 def QLearning(**data):
     if not hasattr(QLearning, "bp"):
         QLearning.bp = QLearningProblem(dc.setting.II)
